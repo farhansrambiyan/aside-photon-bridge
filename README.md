@@ -20,7 +20,7 @@ This is an independent community integration, not an official Aside or Photon pr
 
 ## Requirements
 
-- macOS, Node.js 22 or newer, and npm.
+- macOS, Node.js 22.9 or newer, and npm.
 - Aside Browser installed, configured, and running under the same macOS user.
 - The official Aside CLI with MCP support.
 - A Photon project with an iMessage line, registered sender, project ID, and secret.
@@ -122,7 +122,7 @@ The handler consumes ALL allowlisted direct text messages, not only slash comman
 - Group chats, outgoing events, unknown identities, and attachments without text are ignored.
 - State is private and contains hashed message identities and session mappings, not message bodies.
 - Message IDs are recorded before execution. Failed tasks are not retried automatically.
-- Timeouts, uncertain transport failures, or restarts during execution pause future tasks persistently. Stop the bridge, inspect/stop the old task in Aside, run `npm run unblock`, then restart. Never retry side-effecting work blindly.
+- Timeouts, uncertain transport failures, or restarts during execution pause future tasks persistently. Stop the bridge, inspect/stop the old task in Aside, run `npm run unblock` (or `npm run unblock -- --terminal` for terminal mode), then restart. Never retry side-effecting work blindly.
 - Internal session IDs stay in local state and are removed from outgoing replies. Browser results themselves pass through Photon and iMessage; those services become additional places where sensitive output may appear.
 - App diagnostics avoid credentials and task text; dependency logs can contain service metadata.
 - `.env`, state, logs, database files, dependency folders, and proprietary binaries are ignored. Keep them out of commits, issue attachments, screenshots, and backups intended for publication.
@@ -131,7 +131,7 @@ See [SECURITY.md](SECURITY.md) before exposing a messaging agent to real account
 
 ## Compatibility and limitations
 
-Spectrum packages are pinned to 12.10.1. The MCP parser targets Aside CLI 1.26.1008.1938's fixed `session_id` response header. It parses only that protocol prefix, never an ID appearing in agent prose. An incompatible response fails closed instead of silently starting a new session. New CLI versions should be validated before updating.
+Spectrum packages are pinned to 12.10.1. The MCP parser targets Aside CLI 1.26.1008.1938's fixed `session_id` response header. It parses only that protocol prefix, never an ID appearing in agent prose. An incompatible response fails closed instead of silently starting a new session. The installer fetches the latest official CLI, so run `npm run doctor` and a harmless test task after installing or updating it.
 
 Replies are plain conversational text, not native threaded outgoing replies. Long replies are capped. File/screenshot delivery, pre-login operation, and guaranteed message replay during outages are not implemented. Session continuation and formatting are unit-tested; actual host permissions, service startup, and message delivery must be tested on your own Mac.
 

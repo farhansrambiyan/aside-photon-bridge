@@ -153,3 +153,12 @@ test('outgoing reply is plain text while session stays saved for follow-up', asy
     assert.equal(f.replies.some(reply => reply.includes('ses_test')), false);
   } finally { await f.cleanup(); }
 });
+
+test('unexpected local errors are not forwarded to chat', async () => {
+  const f = await fixture();
+  try {
+    f.bridge.mcp.run = async () => { throw new Error('EACCES /private/local/path'); };
+    await f.bridge.handle(f.message({ text: 'Task' }));
+    assert.equal(f.replies.some(r => r.includes('/private/local/path')), false);
+  } finally { await f.cleanup(); }
+});

@@ -100,7 +100,7 @@ export class Bridge {
         return { success: true, sessionId: result.sessionId || previousSession };
       } catch (error) {
         if (error.mayHaveRun) { this.state.blocked = true; await this.save(); }
-        await reply(`Bridge error: ${error.message}\nCheck Aside before retrying to avoid repeating an action.`);
+        await reply(`Bridge error: ${safeError(error)}\nCheck Aside before retrying to avoid repeating an action.`);
         return { success: false };
       }
     });
@@ -109,6 +109,9 @@ export class Bridge {
   }
   stop() { this.stopped = true; this.mcp.close(); }
 }
+// Only fixed messages created by this bridge are sent; filesystem/provider errors may contain local details.
+const safeMessages = new Set(['Aside timed out. Check the task in Aside before retrying; it may still be running.','Aside authentication failed. Start this bridge from your normal macOS Terminal, as the same user running Aside.','Aside could not complete this request. Check Aside for the error or approval prompt.','Aside MCP rejected the request. Check the Aside desktop app for details.','Aside response format changed. Check the desktop app before continuing.','Aside returned missing or invalid session metadata. Check the desktop app.','Aside connection was interrupted. Check Aside before retrying.','Aside MCP exited. Run npm run doctor from Terminal.','Cannot start Aside CLI. Run npm run doctor from Terminal.','Aside is not connected.','Bridge stopped. Check Aside before retrying any task.']);
+export function safeError(error) { return safeMessages.has(error?.message) ? error.message : 'The bridge hit an unexpected local error. Check the Mac logs.'; }
 export function splitReply(text, size = 3000) {
   const chars = Array.from(text); const parts = [];
   for (let i = 0; i < chars.length && parts.length < 8; i += size) parts.push(chars.slice(i, i + size).join(''));
