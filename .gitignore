@@ -1,0 +1,20 @@
+# Credentials, personal data and runtime files are never source code.
+.env
+.env.*
+!.env.example
+state/
+logs/
+node_modules/
+cli/
+bin/
+.DS_Store
+*.log
+*.db
+*.db-shm
+*.db-wal
+*.pem
+*.key
+*.p12
+*.zip
+coverage/
+test/.state-*/

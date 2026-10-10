@@ -1,0 +1,29 @@
+{
+  "name": "aside-photon-bridge",
+  "version": "1.1.1",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env src/photon.mjs",
+    "terminal": "node --env-file-if-exists=.env src/terminal.mjs",
+    "doctor": "node --env-file-if-exists=.env src/doctor.mjs",
+    "setup": "bash setup.sh",
+    "test": "node --test test/*.test.mjs",
+    "unblock": "node --env-file-if-exists=.env src/unblock.mjs",
+    "check-photon": "node --env-file-if-exists=.env src/check-photon.mjs",
+    "enable-background": "node --env-file=.env src/install-service.mjs"
+  },
+  "dependencies": {
+    "@spectrum-ts/imessage": "12.10.1",
+    "marked": "18.1.0",
+    "spectrum-ts": "12.10.1"
+  },
+  "description": "Self-hosted iMessage-to-Aside browser bridge using Photon and the official Aside MCP CLI",
+  "license": "MIT",
+  "overrides": {
+    "@opentelemetry/core": "2.8.0"
+  }
+}
