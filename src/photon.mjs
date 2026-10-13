@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { config } from './config.mjs';
 import { createAsideHandler } from './integration.mjs';
+import { Assistant } from './assistant.mjs';
 
 const cfg = config();
 if (!cfg.projectId || !cfg.projectSecret || !cfg.allowedSenders.size) {
@@ -44,7 +45,21 @@ try {
   console.log('Connecting Photon. No task text or credentials are written to logs.');
   // Supplied credentials route to the existing project; no separate channel account.
   app = await Spectrum({ projectId: cfg.projectId, projectSecret: cfg.projectSecret, providers: [imessage.config()] });
-  handler = createAsideHandler(cfg);
+  // Proactive messages go only to the first allowlisted sender (the owner).
+  const owner = [...cfg.allowedSenders][0];
+  let ownerSpace;
+  const sendToOwner = async text => {
+    ownerSpace ??= await imessage(app).space.create(owner);
+    const sent = await ownerSpace.send(text);
+    if (!sent) throw new Error('Photon did not accept the message.');
+  };
+  handler = createAsideHandler({ ...cfg, assistantFactory: bridge => new Assistant({
+    bridge, stateDir: cfg.stateDir, timeZone: cfg.timeZone, accountHint: cfg.googleAccount,
+    watchIntervalMin: cfg.watchIntervalMin, gmailUid: cfg.gmailUid, emailMode: cfg.emailMode, watchStart: cfg.watchStart, watchEnd: cfg.watchEnd, briefingTime: cfg.briefingTime,
+    send: text => bridge.notify(sendToOwner, text),
+  }) });
+  await handler.bridge.assistant.load();
+  handler.bridge.assistant.start();
   console.log('Photon connected. Ordinary direct messages continue your Aside session; /new starts fresh. Only allowed sender(s) are accepted.');
   // Avoid blocking the SDK event consumer while a browser task runs. Bridge owns
   // a bounded, serialized task queue and persistent message deduplication.

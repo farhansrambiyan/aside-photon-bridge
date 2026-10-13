@@ -18,3 +18,5 @@ bin/
 *.zip
 coverage/
 test/.state-*/
+media/
+voice/

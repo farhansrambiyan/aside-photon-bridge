@@ -79,6 +79,49 @@ export class AsideMCP {
     }
     return parseExecSuccess(result);
   }
+  // Runs a fixed, bridge-authored snippet in Aside's REPL (never user text) and
+  // reads one JSON line tagged with a marker, so page/console noise is ignored.
+  async replJson(title, code, timeout = 60000) {
+    await this.connect();
+    const marker = '__ASIDE_BRIDGE_JSON__';
+    const wrapped = `try { const __bridgeOut = await (async () => { ${code} })(); console.log(${JSON.stringify(marker)} + JSON.stringify({ ok: true, value: __bridgeOut })); } catch (__bridgeErr) { console.log(${JSON.stringify(marker)} + JSON.stringify({ ok: false })); }`;
+    const result = await this.request('tools/call', { name: 'repl', arguments: { title, code: wrapped } }, timeout);
+    const text = (result?.content || []).filter(c => c.type === 'text').map(c => c.text).join('\n');
+    if (result?.isError && /auth|keychain|cdp-sign|SecItem/i.test(text)) throw new Error('Aside authentication failed. Start this bridge from your normal macOS Terminal, as the same user running Aside.');
+    const line = text.split('\n').map(l => l.trim()).reverse().find(l => l.includes(marker));
+    if (!line) throw new Error('Aside could not read sessions or models. Check the Aside app.');
+    let data; try { data = JSON.parse(line.slice(line.indexOf(marker) + marker.length)); } catch { data = null; }
+    if (!data?.ok) throw new Error('Aside could not read sessions or models. Check the Aside app.');
+    return data.value;
+  }
+  async listSessions(limit = 10) {
+    const n = Math.max(1, Math.min(30, Number(limit) || 10));
+    const list = await this.replJson('List recent sessions', `return aside.sessions.list({ limit: ${Math.min(n * 2, 60)}, ephemeral: 'include' }).map(s => ({ id: s.id, title: s.title || '', status: s.status || '', updatedAt: s.updatedAt || s.createdAt || '' })).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)).slice(0, ${n});`);
+    if (!Array.isArray(list)) throw new Error('Aside could not read sessions or models. Check the Aside app.');
+    return list.filter(s => typeof s?.id === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(s.id));
+  }
+  async sessionInfo(sessionId) {
+    if (!/^[A-Za-z0-9_-]{1,128}$/.test(sessionId || '')) return null;
+    return this.replJson('Read session', `try { const s = aside.sessions.get(${JSON.stringify(sessionId)}); return s ? { id: s.id, title: s.title || '', status: s.status || '', updatedAt: s.updatedAt || '' } : null; } catch { return null; }`);
+  }
+  async getDefaultModel() {
+    const m = await this.replJson('Read default model', `const m = aside.settings.get('defaultModel'); return m ? { provider: m.provider, modelId: m.modelId } : null;`);
+    return m && typeof m.modelId === 'string' ? m : null;
+  }
+  // Sets Aside's default model (used by new sessions) and, if given, the
+  // bridge's current session. Keeps the existing thinking level/speed.
+  async setModel(model, sessionId) {
+    if (!/^[a-z0-9_.-]{1,64}$/i.test(model?.provider || '') || !/^[a-z0-9_.-]{1,128}$/i.test(model?.modelId || '')) throw new Error('Invalid model.');
+    const sid = /^[A-Za-z0-9_-]{1,128}$/.test(sessionId || '') ? sessionId : null;
+    return this.replJson('Switch model', `
+      const cur = aside.settings.get('defaultModel') || {};
+      const next = { ...cur, provider: ${JSON.stringify(model.provider)}, modelId: ${JSON.stringify(model.modelId)} };
+      aside.settings.set('defaultModel', next);
+      let sessionUpdated = false;
+      const sid = ${JSON.stringify(sid)};
+      if (sid) { try { aside.sessions.update(sid, { model: next }); sessionUpdated = true; } catch {} }
+      return { sessionUpdated };`);
+  }
   close() {
     const child = this.child;
     for (const request of this.pending.values()) { clearTimeout(request.timer); request.reject(new Error('Bridge stopped. Check Aside before retrying any task.')); }

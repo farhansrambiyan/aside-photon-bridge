@@ -26,3 +26,13 @@ test('fixed CLI header is parsed without reading IDs embedded in browser answer'
   assert.deepEqual(parseExecSuccess({ isError: false, content: [{ type: 'text', text: 'session_id: actual-session\n\n' + output }] }), { sessionId: 'actual-session', text: output });
   assert.throws(() => parseExecSuccess({ isError: false, content: [{ type: 'text', text: 'An answer session_id: wrong' }] }), /invalid session metadata/);
 });
+
+test('REPL helpers parse marked JSON and drop invalid session IDs', async () => {
+  const client = make(); client.timeoutMs = 5000;
+  try {
+    assert.deepEqual(await client.listSessions(5), [{ id: 'ses_a', title: 'A', status: 'idle', updatedAt: '2026-10-10T00:00:00Z' }]);
+    assert.deepEqual(await client.getDefaultModel(), { provider: 'claude-code', modelId: 'claude-opus-5-5' });
+    assert.deepEqual(await client.setModel({ provider: 'aside', modelId: 'grok-4.7' }, 'ses_a'), { sessionUpdated: true });
+    await assert.rejects(client.setModel({ provider: 'aside', modelId: "x'); evil()" }), /Invalid model/);
+  } finally { client.close(); }
+});

@@ -154,11 +154,82 @@ test('outgoing reply is plain text while session stays saved for follow-up', asy
   } finally { await f.cleanup(); }
 });
 
-test('unexpected local errors are not forwarded to chat', async () => {
+async function richFixture() {
   const f = await fixture();
+  const now = Date.now();
+  f.modelCalls = [];
+  Object.assign(f.bridge.mcp, {
+    listSessions: async () => [
+      { id: 'ses_test', title: 'Check Flipkart orders', status: 'idle', updatedAt: new Date(now - 5 * 60000).toISOString() },
+      { id: 'older_one', title: 'Who is **Sanjay**?', status: 'idle', updatedAt: new Date(now - 3 * 3600000).toISOString() },
+      { id: 'busy_one', title: 'Long task', status: 'running', updatedAt: new Date(now).toISOString() },
+    ],
+    sessionInfo: async id => ({ id, title: id === 'older_one' ? 'Who is Sanjay?' : 'Other', status: id === 'busy_one' ? 'running' : 'idle' }),
+    getDefaultModel: async () => ({ provider: 'claude-code', modelId: 'claude-opus-5-5' }),
+    setModel: async (model, sessionId) => { f.modelCalls.push({ model, sessionId }); return { sessionUpdated: Boolean(sessionId) }; },
+  });
+  return f;
+}
+test('/sessions lists numbered sessions without exposing IDs and marks current', async () => {
+  const f = await richFixture();
   try {
-    f.bridge.mcp.run = async () => { throw new Error('EACCES /private/local/path'); };
+    await f.bridge.handle(f.message({ text: 'First task' }));
+    await f.bridge.handle(f.message({ text: '/sessions' }));
+    const out = f.replies.at(-1);
+    assert.match(out, /1\. Check Flipkart orders \(5m ago\) \(current\)/);
+    assert.match(out, /2\. Who is Sanjay\? \(3h ago\)/);
+    assert.match(out, /3\. Long task \(just now, running\)/);
+    assert.equal(out.includes('older_one') || out.includes('ses_test'), false);
+    assert.equal(f.calls.length, 1);
+  } finally { await f.cleanup(); }
+});
+test('/switch continues the chosen session, survives restart, and validates input', async () => {
+  const f = await richFixture();
+  try {
+    await f.bridge.handle(f.message({ text: '/switch 2' }));
+    assert.match(f.replies.at(-1), /\/sessions first/);
+    await f.bridge.handle(f.message({ text: '/sessions' }));
+    await f.bridge.handle(f.message({ text: '/switch 9' }));
+    assert.match(f.replies.at(-1), /1 to 3/);
+    const r = await f.bridge.handle(f.message({ text: '/switch 2' }));
+    assert.equal(r.switched, true);
+    assert.match(f.replies.at(-1), /Switched to: Who is Sanjay\?/);
+    f.bridge.loaded = false;
+    await f.bridge.handle(f.message({ text: 'Follow up there' }));
+    assert.deepEqual(f.calls.at(-1), { prompt: 'Follow up there', sessionId: 'older_one' });
+    await f.bridge.handle(f.message({ text: '/sessions' }));
+    await f.bridge.handle(f.message({ text: '/switch 3' }));
+    assert.match(f.replies.at(-1), /still running/);
+  } finally { await f.cleanup(); }
+});
+test('/models lists catalog with current marked; /model switches by number or id', async () => {
+  const f = await richFixture();
+  try {
+    await f.bridge.handle(f.message({ text: '/models' }));
+    assert.match(f.replies.at(-1), /1\. Claude Opus 5\.5 \(current\)/);
+    assert.match(f.replies.at(-1), /GPT-6\.1 Sol/);
+    await f.bridge.handle(f.message({ text: '/model' }));
+    assert.match(f.replies.at(-1), /Current model: Claude Opus 5\.5/);
+    await f.bridge.handle(f.message({ text: '/model 15' }));
+    assert.deepEqual(f.modelCalls[0], { model: { provider: 'aside', modelId: 'gpt-6.1-sol', name: 'GPT-6.1 Sol' }, sessionId: undefined });
     await f.bridge.handle(f.message({ text: 'Task' }));
-    assert.equal(f.replies.some(r => r.includes('/private/local/path')), false);
+    await f.bridge.handle(f.message({ text: '/model aside/grok-4.7' }));
+    assert.equal(f.modelCalls[1].model.modelId, 'grok-4.7'); assert.equal(f.modelCalls[1].sessionId, 'ses_test');
+    assert.match(f.replies.at(-1), /Switched to Grok 4\.7.*this conversation/);
+    await f.bridge.handle(f.message({ text: '/model 999' }));
+    assert.match(f.replies.at(-1), /could not find/);
+    assert.equal(f.modelCalls.length, 2);
+    assert.equal(f.calls.length, 1);
+  } finally { await f.cleanup(); }
+});
+test('session/model command failures reply safely', async () => {
+  const f = await richFixture();
+  try {
+    f.bridge.mcp.listSessions = async () => { throw new Error('/private/path leaked'); };
+    f.bridge.mcp.setModel = async () => { throw new Error('Aside could not read sessions or models. Check the Aside app.'); };
+    await f.bridge.handle(f.message({ text: '/sessions' }));
+    assert.match(f.replies.at(-1), /unexpected local error/); assert.equal(f.replies.at(-1).includes('secret'), false);
+    await f.bridge.handle(f.message({ text: '/model 1' }));
+    assert.match(f.replies.at(-1), /Could not switch model: Aside could not read/);
   } finally { await f.cleanup(); }
 });

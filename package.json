@@ -1,10 +1,10 @@
 {
   "name": "aside-photon-bridge",
-  "version": "1.1.2",
+  "version": "1.4.0",
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=22.9"
+    "node": ">=22"
   },
   "scripts": {
     "start": "node --env-file-if-exists=.env src/photon.mjs",
@@ -14,10 +14,12 @@
     "test": "node --test test/*.test.mjs",
     "unblock": "node --env-file-if-exists=.env src/unblock.mjs",
     "check-photon": "node --env-file-if-exists=.env src/check-photon.mjs",
-    "enable-background": "node --env-file=.env src/install-service.mjs"
+    "enable-background": "node --env-file=.env src/install-service.mjs",
+    "setup-voice": "bash scripts/setup-voice.sh"
   },
   "dependencies": {
     "@spectrum-ts/imessage": "12.10.1",
+    "chrono-node": "2.10.2",
     "marked": "18.1.0",
     "spectrum-ts": "12.10.1"
   },

@@ -16,6 +16,9 @@ This is an independent community integration, not an official Aside or Photon pr
 - Required sender allowlist and direct-message-only routing.
 - Sequential execution and persistent message deduplication.
 - Optional macOS background service, automatic crash restart, and login startup.
+- Reminders ("remind me tomorrow morning to call mom"), important-email alerts and an on-demand briefing from Gmail and Calendar, using Aside's own Google access (no Google API keys).
+- Typing indicator while Aside works, swipe-reply to continue an earlier conversation, and a "queued" note instead of silence.
+- Photos, videos and files are handed to Aside by path; voice messages are transcribed on your Mac.
 - Standalone terminal mode and an integration handler for existing Photon agents.
 
 ## Requirements
@@ -39,6 +42,7 @@ bash install-cli.command
 npm run setup
 npm run doctor
 npm start
+npm run setup-voice   # optional: voice-message transcription
 ```
 
 Alternatively, set `ASIDE_CLI` in `.env` to an existing official CLI's absolute path. The installer is downloaded from Aside at setup time and asks before executing.
@@ -115,6 +119,52 @@ try {
 ```
 
 The handler consumes ALL allowlisted direct text messages, not only slash commands. It does not instantiate another Photon app. Load `.env` securely into the process, or pass explicit config overrides. Use one handler/process per state folder.
+
+## Personal assistant features (iMessage mode)
+
+These run inside the background service and use Aside's own Gmail, Google Calendar and Google Docs access through your signed-in Google account. No Google Cloud project, OAuth app or API keys are needed.
+
+Reminders, handled locally and delivered by iMessage:
+
+    remind me tomorrow morning to call mom      (morning = 9:00, afternoon 14:00, evening 18:00, tonight 20:00)
+    remind me in 2 hours to check the oven
+    remind me friday at 5pm to pay rent
+    /reminders            list upcoming reminders
+    /cancel 2             cancel reminder 2
+
+Reminders are saved in state/assistant.json and survive restarts. If the Mac was asleep or off, the reminder is delivered as soon as the service is back, marked as late. Repeating reminders are not supported yet.
+
+Important email alerts, built to save tokens: every 5 minutes between 08:00 and 22:00 the bridge runs a plain Gmail lookup through Aside's REPL (no AI model). If there is no new non-promotional mail, nothing else happens and no tokens are used. Only when new mail arrives does it send the new emails' sender, subject and a short preview to one small AI classification. The AI may only answer with list numbers, and the alert text is built from the bridge's own copy of sender and subject, so email content cannot make it say or do something else. With /watch rules there is no AI at all (keyword and sender rules, less accurate).
+
+    /watch                show status
+    /watch off | on       disable or enable
+    /watch 10             check every 10 minutes (2 to 720)
+    /watch rules | ai     no-AI rules, or short AI check for new mail
+
+Briefing on request: send /briefing to get today's calendar, important unread email and today's reminders. Nothing is sent automatically. If you ever want it daily, send /briefing 08:00 (and /briefing off to stop).
+
+Google Docs and anything else work on demand: just ask, for example "summarize my Google Doc called Q4 plan".
+
+Settings live in .env (GOOGLE_ACCOUNT, EMAIL_CHECK_MINUTES, EMAIL_CHECK_START_HOUR, EMAIL_CHECK_END_HOUR, BRIEFING_TIME). Chat commands override them and are remembered. Each email check and briefing uses an Aside agent run, so they count toward your normal Aside model usage. Background checks share the task queue with your own requests, so a message sent during a check waits for it to finish.
+
+Proactive messages go only to the first number in ALLOWED_SENDERS.
+
+## Chat experience (iMessage)
+
+- No "passing your task" message. When you send a message the chat shows it as read. When Aside actually starts working, iMessage shows the typing bubble, refreshed every 15 seconds until the answer arrives.
+- If another task is already running, you get one short "Queued" message instead of silence.
+- Swipe-reply (long press, Reply) on any earlier answer to continue that conversation, even after you started a newer one. Reply to another message (for example one of your own) and its text is passed along as context. A plain message continues the conversation you used last.
+- If the conversation is still running elsewhere (for example in the Aside app), you are told it is busy instead of waiting silently. Send /new for a fresh one.
+- Photos, files and voice notes are not read; you get a short note saying so.
+- The service log (logs/service.log) records who was ignored and why, with the sender masked and no message text, so a missing message can be traced.
+
+## Photos, videos, files and voice messages
+
+- Photos, videos and other files you send are saved to a private folder (media/, owner-only) and handed to Aside as file paths. Aside opens and understands them itself; the bridge does no conversion. Add your question as the caption, or send them alone and Aside will say what it is.
+- Voice messages are turned into text on this Mac and treated exactly like a typed message. By default you see a short "Heard: ..." line first (ECHO_TRANSCRIPT=off hides it).
+- Voice setup (free, private, about 700 MB of downloads): run npm run setup-voice once. Alternatives: VOICE_API_KEY for a cloud service (audio leaves your Mac), or VOICE_COMMAND for your own program. If voice is not set up, you get a message saying how to do it, and nothing runs.
+- Saved attachments are deleted after 3 days. Limit: 100 MB per file, 6 files per message.
+- Only your allowlisted number can make the bridge download anything.
 
 ## Safety and privacy
 
